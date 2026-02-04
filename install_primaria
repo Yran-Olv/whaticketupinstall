@@ -36,38 +36,75 @@ source "${PROJECT_ROOT}"/config
 # interactive CLI
 inquiry_options
 
+# Pre-installation validation
+if [ "${option}" = "0" ]; then
+  pre_install_validation
+fi
+
 # dependencies related
-system_update
-system_node_install
-system_pm2_install
-system_docker_install
-system_puppeteer_dependencies
-system_snapd_install
-system_nginx_install
-system_certbot_install
+if [ "${option}" = "0" ]; then
+  system_update
+  system_node_install
+  install_ffmpeg
+  system_pm2_install
+  system_docker_install
+  system_puppeteer_dependencies
+  system_snapd_install
+  system_nginx_install
+  system_certbot_install
+  
+  # PostgreSQL configuration
+  configure_postgresql
+  
+  # Security configuration
+  configure_firewall
+  configure_fail2ban
+  configure_auto_updates
+  configure_ssh_hardening
+fi
 
 # system config
-system_create_user
+if [ "${option}" = "0" ]; then
+  system_create_user
+fi
 
 # backend related
-system_git_clone
-backend_set_env
-backend_redis_create
-backend_node_dependencies
-backend_node_build
-backend_db_migrate
-backend_db_seed
-backend_start_pm2
-backend_nginx_setup
+if [ "${option}" = "0" ]; then
+  system_git_clone
+  create_upload_directories "${instancia_add}"
+  backend_set_env
+  backend_redis_create
+  backend_node_dependencies
+  backend_node_build
+  backend_db_migrate
+  backend_db_seed
+  backend_start_pm2
+  backend_nginx_setup
+fi
 
 # frontend related
-frontend_set_env
-frontend_node_dependencies
-frontend_node_build
-frontend_start_pm2
-frontend_nginx_setup
+if [ "${option}" = "0" ]; then
+  frontend_set_env
+  frontend_node_dependencies
+  frontend_node_build
+  frontend_start_pm2
+  frontend_nginx_setup
+fi
 
 # network related
-system_nginx_conf
-system_nginx_restart
-system_certbot_setup
+if [ "${option}" = "0" ]; then
+  system_nginx_conf
+  system_nginx_restart
+  system_certbot_setup
+  
+  # Post-installation configuration
+  configure_pm2_logs
+  configure_auto_backup "${instancia_add}"
+  create_monitoring_script "${instancia_add}"
+  
+  # Verify FFmpeg
+  verify_ffmpeg
+  
+  # Health check
+  health_check "${instancia_add}"
+fi

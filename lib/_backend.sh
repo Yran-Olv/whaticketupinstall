@@ -15,16 +15,29 @@ backend_redis_create() {
 
   sudo su - root <<EOF
   usermod -aG docker deploy
+  
+  # Remove existing Redis container if exists
+  docker rm -f redis-${instancia_add} 2>/dev/null || true
+  
+  # Create Redis container
   docker run --name redis-${instancia_add} -p ${redis_port}:6379 --restart always --detach redis redis-server --requirepass ${mysql_root_password}
   
   sleep 2
-  sudo su - postgres
-  createdb ${instancia_add};
-  psql
-  CREATE USER ${instancia_add} SUPERUSER INHERIT CREATEDB CREATEROLE;
-  ALTER USER ${instancia_add} PASSWORD '${mysql_root_password}';
-  \q
-  exit
+  
+  # Create PostgreSQL database and user
+  sudo -u postgres bash <<PSQL_SCRIPT
+# Create database if not exists
+if ! psql -lqt | cut -d \| -f 1 | grep -qw ${instancia_add}; then
+  createdb ${instancia_add}
+fi
+
+# Drop user if exists and create new
+psql -c "DROP USER IF EXISTS ${instancia_add};" || true
+psql -c "CREATE USER ${instancia_add} WITH SUPERUSER INHERIT CREATEDB CREATEROLE PASSWORD '${mysql_root_password}';"
+
+# Grant privileges
+psql -c "GRANT ALL PRIVILEGES ON DATABASE ${instancia_add} TO ${instancia_add};"
+PSQL_SCRIPT
 EOF
 
 sleep 2
@@ -54,12 +67,61 @@ backend_set_env() {
   frontend_url=https://$frontend_url
 
 sudo su - deploy << EOF
+  # Initialize variables if not set
+  if [ -z "${email_configured}" ]; then
+    email_configured=false
+  fi
+  
+  if [ -z "${mail_host}" ]; then
+    mail_host="smtp.hostinger.com"
+    mail_port="465"
+    mail_user="contato@seusite.com"
+    mail_pass="senha"
+    mail_from="Recuperar Senha <contato@seusite.com>"
+  fi
+  
+  if [ -z "${storage_type}" ]; then
+    storage_type="local"
+  fi
+  
+  if [ -z "${storage_configured}" ]; then
+    storage_configured=false
+  fi
+  
+  if [ -z "${vapid_subject}" ]; then
+    vapid_subject="mailto:deploy@${instancia_add}.com"
+  fi
+  
+  if [ -z "${push_configured}" ]; then
+    push_configured=false
+  fi
+  
+  # Generate VAPID keys for push notifications (if configured)
+  cd /home/deploy/${instancia_add}/backend
+  if [ "${push_configured}" = "true" ] && [ -f "scripts/generate-vapid-keys.js" ]; then
+    VAPID_KEYS=\$(node scripts/generate-vapid-keys.js 2>/dev/null || echo "")
+    VAPID_PUBLIC_KEY=\$(echo "\$VAPID_KEYS" | grep "VAPID_PUBLIC_KEY" | cut -d'=' -f2)
+    VAPID_PRIVATE_KEY=\$(echo "\$VAPID_KEYS" | grep "VAPID_PRIVATE_KEY" | cut -d'=' -f2)
+  else
+    VAPID_PUBLIC_KEY=""
+    VAPID_PRIVATE_KEY=""
+  fi
+  
+  if [ -z "${vapid_subject}" ]; then
+    vapid_subject="mailto:deploy@${instancia_add}.com"
+  fi
+  
+  if [ -z "${push_configured}" ]; then
+    push_configured=false
+  fi
+  
   cat <<[-]EOF > /home/deploy/${instancia_add}/backend/.env
-NODE_ENV=
+NODE_ENV=production
 BACKEND_URL=${backend_url}
 FRONTEND_URL=${frontend_url}
 PROXY_PORT=443
 PORT=${backend_port}
+TZ=America/Sao_Paulo
 
 DB_DIALECT=postgres
 DB_HOST=localhost
@@ -67,25 +129,86 @@ DB_PORT=5432
 DB_USER=${instancia_add}
 DB_PASS=${mysql_root_password}
 DB_NAME=${instancia_add}
+DB_DEBUG=false
 
 JWT_SECRET=${jwt_secret}
 JWT_REFRESH_SECRET=${jwt_refresh_secret}
+JWT_EXPIRES_IN=1d
+JWT_REFRESH_EXPIRES_IN=7d
 
 REDIS_URI=redis://:${mysql_root_password}@127.0.0.1:${redis_port}
+REDIS_HOST=127.0.0.1
+REDIS_PORT=${redis_port}
+REDIS_PASSWORD=${mysql_root_password}
 REDIS_OPT_LIMITER_MAX=1
-REGIS_OPT_LIMITER_DURATION=3000
+REDIS_OPT_LIMITER_DURATION=3000
 
 USER_LIMIT=${max_user}
 CONNECTIONS_LIMIT=${max_whats}
 CLOSED_SEND_BY_ME=true
 
-MAIL_HOST="smtp.hostinger.com"
-MAIL_USER="contato@seusite.com"
-MAIL_PASS="senha"
-MAIL_FROM="Recuperar Senha <contato@seusite.com>"
-MAIL_PORT="465"
+STORAGE_TYPE=${storage_type}
+UPLOAD_FOLDER=public/uploads
+
+MAIL_HOST="${mail_host}"
+MAIL_USER="${mail_user}"
+MAIL_PASS="${mail_pass}"
+MAIL_FROM="${mail_from}"
+MAIL_PORT="${mail_port}"
+
+VAPID_PUBLIC_KEY=\${VAPID_PUBLIC_KEY}
+VAPID_PRIVATE_KEY=\${VAPID_PRIVATE_KEY}
+VAPID_SUBJECT="${vapid_subject}"
 
 [-]EOF
+EOF
+
+  # Add AWS S3 configuration if selected
+  if [ "${storage_type}" = "s3" ] && [ "${storage_configured}" = "true" ]; then
+    sudo su - deploy << AWS_EOF
+cat >> /home/deploy/${instancia_add}/backend/.env << 'AWS_ENV'
+AWS_ACCESS_KEY_ID=${aws_access_key_id}
+AWS_SECRET_ACCESS_KEY=${aws_secret_access_key}
+AWS_REGION=${aws_region}
+AWS_BUCKET_NAME=${aws_bucket_name}
+AWS_ENV
+AWS_EOF
+  fi
+  
+  # Show configuration summary
+  printf "\n${WHITE} 📋 Resumo da Configuração:${NC}\n\n"
+  
+  # Email status
+  if [ "${email_configured}" = "true" ]; then
+    printf "${GREEN} ✅ Email SMTP configurado${NC}\n"
+  else
+    printf "${YELLOW} ⚠️  Email SMTP NÃO configurado (OBRIGATÓRIO)${NC}\n"
+    printf "${YELLOW}    Configure manualmente em: /home/deploy/${instancia_add}/backend/.env${NC}\n"
+    printf "${YELLOW}    Variáveis: MAIL_HOST, MAIL_USER, MAIL_PASS, MAIL_FROM, MAIL_PORT${NC}\n"
+  fi
+  
+  # Push notifications status
+  if [ "${push_configured}" = "true" ]; then
+    printf "${GREEN} ✅ Notificações Push configuradas${NC}\n"
+    if [ -z "\${VAPID_PUBLIC_KEY}" ] || [ "\${VAPID_PUBLIC_KEY}" = "" ]; then
+      printf "${YELLOW}    ⚠️  Chaves VAPID não foram geradas automaticamente${NC}\n"
+      printf "${GRAY_LIGHT}    Execute: cd /home/deploy/${instancia_add}/backend && node scripts/generate-vapid-keys.js${NC}\n"
+    else
+      printf "${GREEN}    ✅ Chaves VAPID geradas${NC}\n"
+    fi
+  else
+    printf "${GRAY_LIGHT} ⚪ Notificações Push não configuradas (opcional)${NC}\n"
+  fi
+  
+  # Storage status
+  if [ "${storage_type}" = "s3" ] && [ "${storage_configured}" = "true" ]; then
+    printf "${GREEN} ✅ Armazenamento S3 configurado${NC}\n"
+  else
+    printf "${GRAY_LIGHT} ⚪ Armazenamento Local (padrão)${NC}\n"
+  fi
+  
+  printf "\n"
+  sleep 2
 EOF
 
   sleep 2
@@ -218,7 +341,8 @@ backend_start_pm2() {
 
   sudo su - deploy <<EOF
   cd /home/deploy/${instancia_add}/backend
-  pm2 start dist/server.js --name ${instancia_add}-backend
+  pm2 start dist/server.js --name ${instancia_add}-backend --max-memory-restart 8096M --node-args="--max-old-space-size=8096"
+  pm2 save
 EOF
 
   sleep 2

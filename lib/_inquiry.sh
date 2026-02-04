@@ -83,6 +83,126 @@ get_redis_port() {
   read -p "> " redis_port
 }
 
+#######################################
+# Email SMTP Configuration
+# Arguments:
+#   None
+#######################################
+get_email_config() {
+  print_banner
+  printf "${WHITE} 📧 Configuração de Email SMTP (OBRIGATÓRIO para recuperação de senha)${GRAY_LIGHT}\n\n"
+  printf "${YELLOW} ⚠️  Esta configuração é obrigatória para recuperação de senha funcionar${NC}\n\n"
+  
+  printf "${WHITE} Deseja configurar Email SMTP agora? (s/n):${GRAY_LIGHT}\n\n"
+  read -p "> " config_email
+  
+  if [ "$config_email" = "s" ] || [ "$config_email" = "S" ] || [ "$config_email" = "sim" ] || [ "$config_email" = "Sim" ] || [ "$config_email" = "y" ] || [ "$config_email" = "Y" ]; then
+    printf "\n${WHITE} Servidor SMTP (ex: smtp.gmail.com, smtp.hostinger.com):${GRAY_LIGHT}\n\n"
+    read -p "> " mail_host
+    
+    printf "\n${WHITE} Porta SMTP (ex: 465 para SSL, 587 para TLS):${GRAY_LIGHT}\n\n"
+    read -p "> " mail_port
+    
+    printf "\n${WHITE} Email de envio:${GRAY_LIGHT}\n\n"
+    read -p "> " mail_user
+    
+    printf "\n${WHITE} Senha do email (ou senha de aplicativo):${GRAY_LIGHT}\n\n"
+    read -sp "> " mail_pass
+    printf "\n"
+    
+    printf "\n${WHITE} Nome e email remetente (ex: Whaticket <noreply@dominio.com>):${GRAY_LIGHT}\n\n"
+    read -p "> " mail_from
+    
+    email_configured=true
+  else
+    # Valores padrão (devem ser configurados manualmente depois)
+    mail_host="smtp.hostinger.com"
+    mail_port="465"
+    mail_user="contato@seusite.com"
+    mail_pass="senha"
+    mail_from="Recuperar Senha <contato@seusite.com>"
+    email_configured=false
+    
+    printf "\n${YELLOW} ⚠️  Email não configurado. Configure manualmente após a instalação em:${NC}\n"
+    printf "${GRAY_LIGHT}    /home/deploy/${instancia_add}/backend/.env${NC}\n\n"
+    sleep 3
+  fi
+}
+
+#######################################
+# Push Notifications Configuration
+# Arguments:
+#   None
+#######################################
+get_push_notifications_config() {
+  print_banner
+  printf "${WHITE} 🔔 Configuração de Notificações Push (OPCIONAL)${GRAY_LIGHT}\n\n"
+  printf "${GRAY_LIGHT} Notificações push permitem receber alertas mesmo com navegador fechado${NC}\n\n"
+  
+  printf "${WHITE} Deseja configurar Notificações Push? (s/n):${GRAY_LIGHT}\n\n"
+  read -p "> " config_push
+  
+  if [ "$config_push" = "s" ] || [ "$config_push" = "S" ] || [ "$config_push" = "sim" ] || [ "$config_push" = "Sim" ] || [ "$config_push" = "y" ] || [ "$config_push" = "Y" ]; then
+    printf "\n${WHITE} Email para VAPID Subject (ex: admin@dominio.com ou mailto:admin@dominio.com):${GRAY_LIGHT}\n\n"
+    read -p "> " vapid_subject_input
+    
+    # Remove "mailto:" se o usuário não incluir
+    if [[ ! "$vapid_subject_input" =~ ^mailto: ]]; then
+      vapid_subject="mailto:$vapid_subject_input"
+    else
+      vapid_subject="$vapid_subject_input"
+    fi
+    
+    push_configured=true
+  else
+    vapid_subject="mailto:deploy@${instancia_add}.com"
+    push_configured=false
+  fi
+}
+
+#######################################
+# Storage Configuration
+# Arguments:
+#   None
+#######################################
+get_storage_config() {
+  print_banner
+  printf "${WHITE} 💾 Configuração de Armazenamento${GRAY_LIGHT}\n\n"
+  printf "${GRAY_LIGHT} Escolha o tipo de armazenamento para arquivos e mídias${NC}\n\n"
+  printf "   [1] Local (padrão - arquivos no servidor)\n"
+  printf "   [2] Amazon S3 (AWS)\n"
+  printf "\n"
+  read -p "> " storage_option
+  
+  case "${storage_option}" in
+    1)
+      storage_type="local"
+      storage_configured=false
+      ;;
+    2)
+      storage_type="s3"
+      printf "\n${WHITE} AWS Access Key ID:${GRAY_LIGHT}\n\n"
+      read -p "> " aws_access_key_id
+      
+      printf "\n${WHITE} AWS Secret Access Key:${GRAY_LIGHT}\n\n"
+      read -sp "> " aws_secret_access_key
+      printf "\n"
+      
+      printf "\n${WHITE} AWS Region (ex: us-east-1, sa-east-1):${GRAY_LIGHT}\n\n"
+      read -p "> " aws_region
+      
+      printf "\n${WHITE} AWS Bucket Name:${GRAY_LIGHT}\n\n"
+      read -p "> " aws_bucket_name
+      
+      storage_configured=true
+      ;;
+    *)
+      storage_type="local"
+      storage_configured=false
+      ;;
+  esac
+}
+
 get_empresa_delete() {
   
   print_banner
@@ -168,6 +288,9 @@ get_urls() {
   get_frontend_port
   get_backend_port
   get_redis_port
+  get_email_config
+  get_push_notifications_config
+  get_storage_config
 }
 
 software_update() {

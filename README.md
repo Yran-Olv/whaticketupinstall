@@ -4,7 +4,7 @@
 
 1. **Clone ou copie os arquivos para o servidor:**
 ```bash
-cd /caminho/para/atevus-install
+cd /caminho/para/whaticketupinstall
 ```
 
 2. **Torne os scripts executáveis:**
@@ -16,6 +16,11 @@ chmod +x install_primaria install_instancia
 ```bash
 sudo ./install_primaria
 ```
+
+**⚠️ IMPORTANTE:** Antes de executar, certifique-se de que:
+- Os domínios estão configurados no DNS apontando para o IP do servidor
+- Você tem pelo menos 10GB de espaço em disco disponível
+- As portas escolhidas não estão em uso
 
 4. **Durante a instalação, você precisará fornecer:**
    - Senha para usuário deploy e banco de dados (Sem Caracteres Especiais)
@@ -138,16 +143,28 @@ sudo certbot certificates
 
 ### Backup Automatizado
 
-O script de backup (`_backup.sh`) realiza:
+O sistema de backup é configurado **automaticamente** durante a instalação:
 
-1. **Limpeza automática** - Remove backups mais antigos que 5 dias
-2. **Backup de todos os bancos** - Gera dump de cada banco PostgreSQL
-3. **Compressão** - Compacta os backups em `.tar.gz`
-4. **Verificação de integridade** - Gera checksum SHA1
-5. **Backup completo semanal** - Todo domingo gera backup completo do PostgreSQL
-6. **Otimização** - Executa `vacuumdb` no backup semanal
-7. **Envio remoto** - Envia backups para servidor remoto via SSH (configurável)
-8. **Notificação por email** - Envia email de confirmação (configurável)
+1. **Backup Diário Automático** - Executado diariamente às 2:00 AM via cron
+2. **Backup de Banco de Dados** - Dump completo do PostgreSQL em formato custom
+3. **Backup de Arquivos** - Backup dos arquivos da aplicação
+4. **Limpeza Automática** - Remove backups mais antigos que 7 dias
+5. **Compressão** - Backups são compactados automaticamente
+6. **Logs** - Todas as operações são registradas em `/var/log/whaticket-backup.log`
+
+### Executar Backup Manual
+
+```bash
+sudo /usr/local/bin/backup-<nome-instancia>.sh
+```
+
+### Restaurar Backup
+
+```bash
+# Use a função restore_backup no script
+# ou execute manualmente:
+sudo -u postgres pg_restore -d <nome-instancia> /backup/<nome-instancia>/db_YYYYMMDD_HHMMSS.dump
+```
 
 ### Configuração do Backup
 
@@ -265,18 +282,44 @@ CYAN_LIGHT="\033[1;36m"
 
 ## 🔒 Segurança
 
-O sistema implementa várias medidas de segurança:
+O sistema implementa várias medidas de segurança **automaticamente**:
 
-1. **Firewall UFW** - Configurado para permitir apenas portas necessárias
-2. **Fail2ban** - Proteção contra ataques de força bruta
-3. **SSL/TLS** - Certificados Let's Encrypt via Certbot
-4. **Isolamento de instâncias** - Cada instância tem seu próprio banco e Redis
-5. **Permissões restritas** - Arquivo de configuração com permissões 700
-6. **Usuário dedicado** - Aplicação roda como usuário `deploy` (não root)
+1. **Firewall UFW** - Configurado automaticamente para permitir apenas portas necessárias
+2. **Fail2ban** - Instalado e configurado automaticamente para proteção contra ataques de força bruta
+3. **SSL/TLS** - Certificados Let's Encrypt via Certbot configurados automaticamente
+4. **Atualizações Automáticas** - Sistema de atualizações de segurança configurado
+5. **SSH Hardening** - Configurações de segurança SSH aplicadas automaticamente
+6. **Isolamento de instâncias** - Cada instância tem seu próprio banco e Redis
+7. **Permissões restritas** - Arquivo de configuração com permissões 700
+8. **Usuário dedicado** - Aplicação roda como usuário `deploy` (não root)
+
+### Validações Automáticas
+
+O instalador agora realiza validações automáticas antes da instalação:
+- ✅ Verificação de espaço em disco (mínimo 10GB)
+- ✅ Validação de nomes de instância
+- ✅ Verificação de portas disponíveis
+- ✅ Validação de URLs e formatos
+- ✅ Verificação de resolução DNS (aviso)
+- ✅ Verificação de instâncias duplicadas
 
 ## 🐛 Troubleshooting
 
+### Verificação de Saúde Automática
+
+Após a instalação, o sistema executa uma verificação automática de saúde que verifica:
+- ✅ Status dos processos PM2 (backend e frontend)
+- ✅ Status do container Redis
+- ✅ Existência do banco de dados PostgreSQL
+- ✅ Status do serviço Nginx
+- ✅ Configuração de certificados SSL
+
 ### Problemas comuns
+
+**Erro de validação pré-instalação:**
+- Verifique se as portas escolhidas não estão em uso: `sudo lsof -i :PORTA` ou `sudo netstat -tuln | grep PORTA`
+- Verifique se há espaço em disco: `df -h`
+- Verifique se os domínios estão configurados no DNS
 
 **Erro ao clonar repositório Git:**
 - Verifique se o servidor tem acesso ao repositório
@@ -284,17 +327,17 @@ O sistema implementa várias medidas de segurança:
 
 **Erro ao instalar dependências npm:**
 - Verifique conexão com internet
-- Verifique versão do Node.js: `node -v` (deve ser 20.19.6)
+- Verifique versão do Node.js: `node -v` (deve ser 20.x)
 - Limpe cache: `npm cache clean --force`
 
 **Erro ao configurar SSL:**
 - Verifique se os domínios apontam para o servidor
-- Verifique se porta 80 está aberta
+- Verifique se porta 80 está aberta no firewall
 - Verifique logs: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
 
 **Erro ao iniciar PM2:**
 - Verifique logs: `pm2 logs nome-instancia-backend`
-- Verifique variáveis de ambiente
+- Verifique variáveis de ambiente no arquivo `.env`
 - Verifique se as portas estão disponíveis
 
 **Banco de dados não conecta:**
@@ -302,19 +345,33 @@ O sistema implementa várias medidas de segurança:
 - Verifique usuário e senha no `.env`
 - Verifique se o banco foi criado: `sudo su - postgres -c "psql -l"`
 
+**Firewall bloqueando conexões:**
+- Verifique status do UFW: `sudo ufw status`
+- Adicione regras se necessário: `sudo ufw allow PORTA/tcp`
+
+**Logs PM2 muito grandes:**
+- Os logs são rotacionados automaticamente
+- Verifique configuração: `pm2 conf pm2-logrotate`
+
 ## 📝 Notas Importantes
 
-1. **Portas**: Certifique-se de que as portas escolhidas não estão em uso. O script não verifica isso automaticamente.
+1. **Portas**: O script agora verifica automaticamente se as portas estão disponíveis antes da instalação.
 
-2. **Domínios**: Os domínios devem estar configurados no DNS apontando para o IP do servidor antes de executar a instalação.
+2. **Domínios**: Os domínios devem estar configurados no DNS apontando para o IP do servidor antes de executar a instalação. O script verifica e avisa se não estiverem configurados.
 
 3. **Senhas**: Use senhas fortes. O script gera senhas aleatórias para JWT e algumas configurações.
 
-4. **Backups**: Configure backups regulares. O script de backup deve ser executado via cron para automatizar.
+4. **Backups**: Backups automáticos são configurados durante a instalação. Executados diariamente às 2:00 AM.
 
-5. **Atualizações**: Após atualizações do sistema operacional, pode ser necessário reinstalar algumas dependências.
+5. **Segurança**: Firewall, Fail2ban e atualizações automáticas são configurados automaticamente.
 
-6. **Múltiplas instâncias**: Cada instância deve usar portas diferentes. Mantenha um registro das portas usadas.
+6. **Monitoramento**: Scripts de monitoramento são criados automaticamente e verificam a saúde dos serviços a cada 5 minutos.
+
+7. **Logs**: Logs do PM2 são rotacionados automaticamente. Configuração padrão: máximo 10MB por arquivo, retenção de 7 dias.
+
+8. **Múltiplas instâncias**: Cada instância deve usar portas diferentes. O script valida isso automaticamente.
+
+9. **Espaço em Disco**: O script verifica se há pelo menos 10GB disponíveis antes de iniciar a instalação.
 
 ## 👨‍💻 Desenvolvimento
 
