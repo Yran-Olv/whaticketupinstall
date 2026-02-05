@@ -43,35 +43,60 @@ health_check() {
   printf "${WHITE} 🏥 Verificando saúde do sistema...${GRAY_LIGHT}\n\n"
   
   local errors=0
+  local fixed=0
   
   # Check PM2 processes
   printf "Verificando processos PM2...\n"
-  if ! sudo su - deploy -c "pm2 list | grep -q '${instance}-backend.*online'"; then
-    printf "${RED} ❌ Backend não está rodando${NC}\n"
-    errors=$((errors + 1))
+  if ! sudo su - deploy -c "pm2 list | grep -q '${instance}-backend.*online'" 2>/dev/null; then
+    printf "${YELLOW} ⚠️  Backend não está rodando. Tentando iniciar...${NC}\n"
+    sudo su - deploy -c "cd /home/deploy/${instance}/backend && pm2 start dist/server.js --name ${instance}-backend --max-memory-restart 8096M --node-args=\"--max-old-space-size=8096\" 2>/dev/null && pm2 save" 2>/dev/null
+    sleep 2
+    if sudo su - deploy -c "pm2 list | grep -q '${instance}-backend.*online'" 2>/dev/null; then
+      printf "${GREEN} ✅ Backend iniciado com sucesso!${NC}\n"
+      fixed=$((fixed + 1))
+    else
+      printf "${RED} ❌ Não foi possível iniciar o backend${NC}\n"
+      errors=$((errors + 1))
+    fi
   else
     printf "${GREEN} ✅ Backend está rodando${NC}\n"
   fi
   
-  if ! sudo su - deploy -c "pm2 list | grep -q '${instance}-frontend.*online'"; then
-    printf "${RED} ❌ Frontend não está rodando${NC}\n"
-    errors=$((errors + 1))
+  if ! sudo su - deploy -c "pm2 list | grep -q '${instance}-frontend.*online'" 2>/dev/null; then
+    printf "${YELLOW} ⚠️  Frontend não está rodando. Tentando iniciar...${NC}\n"
+    sudo su - deploy -c "cd /home/deploy/${instance}/frontend && pm2 start server.js --name ${instance}-frontend 2>/dev/null && pm2 save" 2>/dev/null
+    sleep 2
+    if sudo su - deploy -c "pm2 list | grep -q '${instance}-frontend.*online'" 2>/dev/null; then
+      printf "${GREEN} ✅ Frontend iniciado com sucesso!${NC}\n"
+      fixed=$((fixed + 1))
+    else
+      printf "${RED} ❌ Não foi possível iniciar o frontend${NC}\n"
+      errors=$((errors + 1))
+    fi
   else
     printf "${GREEN} ✅ Frontend está rodando${NC}\n"
   fi
   
   # Check Redis container
   printf "Verificando Redis...\n"
-  if ! sudo docker ps | grep -q "redis-${instance}"; then
-    printf "${RED} ❌ Container Redis não está rodando${NC}\n"
-    errors=$((errors + 1))
+  if ! sudo docker ps 2>/dev/null | grep -q "redis-${instance}"; then
+    printf "${YELLOW} ⚠️  Container Redis não está rodando. Tentando iniciar...${NC}\n"
+    sudo docker start redis-${instance} 2>/dev/null
+    sleep 2
+    if sudo docker ps 2>/dev/null | grep -q "redis-${instance}"; then
+      printf "${GREEN} ✅ Redis iniciado com sucesso!${NC}\n"
+      fixed=$((fixed + 1))
+    else
+      printf "${RED} ❌ Não foi possível iniciar o Redis${NC}\n"
+      errors=$((errors + 1))
+    fi
   else
     printf "${GREEN} ✅ Redis está rodando${NC}\n"
   fi
   
   # Check PostgreSQL
   printf "Verificando PostgreSQL...\n"
-  if ! sudo su - postgres -c "psql -lqt | cut -d \| -f 1 | grep -qw ${instance}"; then
+  if ! sudo su - postgres -c "psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw ${instance}" 2>/dev/null; then
     printf "${RED} ❌ Banco de dados não existe${NC}\n"
     errors=$((errors + 1))
   else
@@ -80,9 +105,31 @@ health_check() {
   
   # Check Nginx
   printf "Verificando Nginx...\n"
-  if ! sudo systemctl is-active --quiet nginx; then
-    printf "${RED} ❌ Nginx não está rodando${NC}\n"
+  if ! command -v nginx >/dev/null 2>&1; then
+    printf "${RED} ❌ Nginx não está instalado${NC}\n"
+    printf "${YELLOW}    Execute: sudo apt install -y nginx${NC}\n"
     errors=$((errors + 1))
+  elif ! sudo systemctl is-active --quiet nginx 2>/dev/null; then
+    printf "${YELLOW} ⚠️  Nginx não está rodando. Tentando iniciar...${NC}\n"
+    
+    # Test Nginx configuration first
+    if sudo nginx -t 2>/dev/null; then
+      sudo systemctl start nginx 2>/dev/null || sudo service nginx start 2>/dev/null
+      sleep 2
+      if sudo systemctl is-active --quiet nginx 2>/dev/null || sudo service nginx status >/dev/null 2>&1; then
+        printf "${GREEN} ✅ Nginx iniciado com sucesso!${NC}\n"
+        fixed=$((fixed + 1))
+      else
+        printf "${RED} ❌ Não foi possível iniciar o Nginx${NC}\n"
+        printf "${YELLOW}    Verifique os logs: sudo tail -f /var/log/nginx/error.log${NC}\n"
+        printf "${YELLOW}    Teste a configuração: sudo nginx -t${NC}\n"
+        errors=$((errors + 1))
+      fi
+    else
+      printf "${RED} ❌ Configuração do Nginx inválida${NC}\n"
+      printf "${YELLOW}    Execute: sudo nginx -t para ver os erros${NC}\n"
+      errors=$((errors + 1))
+    fi
   else
     printf "${GREEN} ✅ Nginx está rodando${NC}\n"
   fi
@@ -93,10 +140,16 @@ health_check() {
     printf "${GREEN} ✅ Certificados SSL configurados${NC}\n"
   else
     printf "${YELLOW} ⚠️  Certificados SSL não encontrados${NC}\n"
+    printf "${GRAY_LIGHT}    Isso é normal se os domínios ainda não estão configurados no DNS${NC}\n"
+  fi
+  
+  if [ $fixed -gt 0 ]; then
+    printf "\n${GREEN} ✅ $fixed problema(s) corrigido(s) automaticamente!${NC}\n"
   fi
   
   if [ $errors -gt 0 ]; then
-    printf "\n${RED} ❌ Encontrados $errors problema(s)${NC}\n"
+    printf "\n${RED} ❌ Encontrados $errors problema(s) que não puderam ser corrigidos automaticamente${NC}\n"
+    printf "${GRAY_LIGHT}    Verifique os logs e tente corrigir manualmente${NC}\n"
     return 1
   else
     printf "\n${GREEN} ✅ Todos os serviços estão funcionando corretamente!${NC}\n"

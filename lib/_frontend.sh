@@ -11,6 +11,10 @@ frontend_node_dependencies() {
   print_banner
   printf "${WHITE} 💻 Instalando dependências do frontend...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Instalando todas as bibliotecas necessárias para o frontend${NC}\n"
+  printf "${GRAY_LIGHT}    • Esta etapa pode levar vários minutos dependendo da conexão${NC}\n"
+  printf "${GRAY_LIGHT}    • As dependências incluem React e outras bibliotecas de interface${NC}\n\n"
 
   sleep 2
 
@@ -31,6 +35,11 @@ frontend_node_build() {
   print_banner
   printf "${WHITE} 💻 Compilando o código do frontend...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Compilando o código React para produção${NC}\n"
+  printf "${GRAY_LIGHT}    • Otimizando imagens, CSS e JavaScript${NC}\n"
+  printf "${GRAY_LIGHT}    • O código compilado será salvo na pasta 'build'${NC}\n"
+  printf "${GRAY_LIGHT}    • Esta etapa pode levar vários minutos...${NC}\n\n"
 
   sleep 2
 
@@ -79,6 +88,10 @@ frontend_set_env() {
   print_banner
   printf "${WHITE} 💻 Configurando variáveis de ambiente (frontend)...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Criando arquivo .env com configurações do frontend${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando URL do backend para comunicação${NC}\n"
+  printf "${GRAY_LIGHT}    • Definindo configurações de localização e timezone${NC}\n\n"
 
   sleep 2
 
@@ -126,8 +139,14 @@ EOF
 #######################################
 frontend_start_pm2() {
   print_banner
-  printf "${WHITE} 💻 Iniciando pm2 (frontend)...${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Iniciando frontend com PM2...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Iniciando o serviço frontend usando PM2${NC}\n"
+  printf "${GRAY_LIGHT}    • PM2 manterá o serviço rodando automaticamente${NC}\n"
+  printf "${GRAY_LIGHT}    • Se o serviço cair, PM2 reiniciará automaticamente${NC}\n"
+  printf "${GRAY_LIGHT}    • O frontend ficará disponível na porta ${frontend_port}${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando PM2 para iniciar automaticamente no boot do sistema${NC}\n\n"
 
   sleep 2
 
@@ -153,12 +172,18 @@ EOF
 #######################################
 frontend_nginx_setup() {
   print_banner
-  printf "${WHITE} 💻 Configurando nginx (frontend)...${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Configurando Nginx para o frontend...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando Nginx para redirecionar requisições do domínio frontend${NC}\n"
+  printf "${GRAY_LIGHT}    • O domínio ${frontend_url} será redirecionado para a porta ${frontend_port}${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando proxy reverso para comunicação segura${NC}\n"
+  printf "${GRAY_LIGHT}    • Permitindo conexões WebSocket para atualizações em tempo real${NC}\n\n"
 
   sleep 2
 
-  frontend_hostname=$(echo "${frontend_url/https:\/\/}")
+  # Remove https:// ou http:// se presente
+  frontend_hostname=$(echo "${frontend_url}" | sed 's|^https\?://||')
 
 sudo su - root << EOF
 

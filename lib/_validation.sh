@@ -145,16 +145,35 @@ validate_instance_name() {
 }
 
 #######################################
-# Validate URL format
+# Validate URL/domain format
 # Arguments:
-#   $1 - URL
+#   $1 - URL or domain (with or without https://)
 # Returns:
 #   0 if valid, 1 if invalid
 #######################################
 validate_url() {
   local url=$1
   
-  if [[ ! "$url" =~ ^https?:// ]]; then
+  # Remove http:// or https:// if present for validation
+  local domain=$(echo "$url" | sed 's|^https\?://||' | cut -d/ -f1)
+  
+  # Check if domain is not empty
+  if [ -z "$domain" ]; then
+    return 1
+  fi
+  
+  # Check if it contains at least one dot (basic domain validation)
+  if [[ ! "$domain" =~ \. ]]; then
+    return 1
+  fi
+  
+  # Check if contains only valid domain characters (letters, numbers, dots, hyphens)
+  if [[ ! "$domain" =~ ^[a-zA-Z0-9.-]+$ ]]; then
+    return 1
+  fi
+  
+  # Check if doesn't start or end with dot or hyphen
+  if [[ "$domain" =~ ^\. ]] || [[ "$domain" =~ \.$ ]] || [[ "$domain" =~ ^- ]] || [[ "$domain" =~ -$ ]]; then
     return 1
   fi
   
@@ -243,21 +262,27 @@ pre_install_validation() {
     errors=$((errors + 1))
   fi
   
-  # Validate URLs
+  # Normalize URLs (remove https:// or http:// if present, we'll add https:// later)
+  # Note: This updates the global variables since we're not using 'local'
+  frontend_url=$(echo "$frontend_url" | sed 's|^https\?://||')
+  backend_url=$(echo "$backend_url" | sed 's|^https\?://||')
+  
+  # Validate URLs/domains (accepts with or without https://)
   if ! validate_url "$frontend_url"; then
-    printf "${RED} ❌ URL do frontend inválida. Use formato: https://dominio.com${NC}\n"
+    printf "${RED} ❌ Domínio do frontend inválido. Use formato: app.exemplo.com.br ou https://app.exemplo.com.br${NC}\n"
     errors=$((errors + 1))
   fi
   
   if ! validate_url "$backend_url"; then
-    printf "${RED} ❌ URL do backend inválida. Use formato: https://dominio.com${NC}\n"
+    printf "${RED} ❌ Domínio do backend inválido. Use formato: api.exemplo.com.br ou https://api.exemplo.com.br${NC}\n"
     errors=$((errors + 1))
   fi
   
   # Check domain resolution (warning only)
+  # Extract domain name (remove path if present)
   printf "${YELLOW} ⚠️  Verificando resolução DNS...${NC}\n"
-  check_domain_resolution "$(echo $frontend_url | sed 's|https\?://||' | cut -d/ -f1)" || true
-  check_domain_resolution "$(echo $backend_url | sed 's|https\?://||' | cut -d/ -f1)" || true
+  check_domain_resolution "$(echo "$frontend_url" | cut -d/ -f1)" || true
+  check_domain_resolution "$(echo "$backend_url" | cut -d/ -f1)" || true
   
   if [ $errors -gt 0 ]; then
     printf "\n${RED} ❌ Encontrados $errors erro(s). Corrija antes de continuar.${NC}\n"

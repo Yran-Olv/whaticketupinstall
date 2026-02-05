@@ -8,8 +8,14 @@
 #######################################
 backend_redis_create() {
   print_banner
-  printf "${WHITE} 💻 Criando Redis & Banco Postgres...${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Criando Redis e Banco de Dados PostgreSQL...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Criando container Docker do Redis na porta ${redis_port}${NC}\n"
+  printf "${GRAY_LIGHT}    • Redis armazena mensagens temporárias e agendamentos${NC}\n"
+  printf "${GRAY_LIGHT}    • Criando banco de dados PostgreSQL '${instancia_add}'${NC}\n"
+  printf "${GRAY_LIGHT}    • Criando usuário do banco de dados com as credenciais informadas${NC}\n"
+  printf "${GRAY_LIGHT}    • O banco de dados armazenará todos os dados permanentes do sistema${NC}\n\n"
 
   sleep 2
 
@@ -53,6 +59,10 @@ backend_set_env() {
   print_banner
   printf "${WHITE} 💻 Configurando variáveis de ambiente (backend)...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Criando arquivo .env com todas as configurações do backend${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando conexões com banco de dados, Redis e URLs${NC}\n"
+  printf "${GRAY_LIGHT}    • Definindo limites de usuários e conexões WhatsApp${NC}\n\n"
 
   sleep 2
 
@@ -223,6 +233,10 @@ backend_node_dependencies() {
   print_banner
   printf "${WHITE} 💻 Instalando dependências do backend...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Instalando todas as bibliotecas necessárias para o backend${NC}\n"
+  printf "${GRAY_LIGHT}    • Esta etapa pode levar vários minutos dependendo da conexão${NC}\n"
+  printf "${GRAY_LIGHT}    • As dependências são salvas no arquivo package.json${NC}\n\n"
 
   sleep 2
 
@@ -243,6 +257,11 @@ backend_node_build() {
   print_banner
   printf "${WHITE} 💻 Compilando o código do backend...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Convertendo o código TypeScript/JavaScript para produção${NC}\n"
+  printf "${GRAY_LIGHT}    • Otimizando o código para melhor performance${NC}\n"
+  printf "${GRAY_LIGHT}    • O código compilado será salvo na pasta 'dist'${NC}\n"
+  printf "${GRAY_LIGHT}    • Esta etapa pode levar alguns minutos...${NC}\n\n"
 
   sleep 2
 
@@ -293,8 +312,12 @@ EOF
 #######################################
 backend_db_migrate() {
   print_banner
-  printf "${WHITE} 💻 Executando db:migrate...${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Executando migrations do banco de dados...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Criando todas as tabelas necessárias no banco de dados${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando a estrutura do banco de dados${NC}\n"
+  printf "${GRAY_LIGHT}    • Esta etapa é essencial para o funcionamento do sistema${NC}\n\n"
 
   sleep 2
 
@@ -313,8 +336,12 @@ EOF
 #######################################
 backend_db_seed() {
   print_banner
-  printf "${WHITE} 💻 Executando db:seed...${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Populando banco de dados com dados iniciais...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Inserindo dados iniciais no banco de dados${NC}\n"
+  printf "${GRAY_LIGHT}    • Criando usuário administrador padrão${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando dados básicos do sistema${NC}\n\n"
 
   sleep 2
 
@@ -334,8 +361,13 @@ EOF
 #######################################
 backend_start_pm2() {
   print_banner
-  printf "${WHITE} 💻 Iniciando pm2 (backend)...${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Iniciando backend com PM2...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Iniciando o serviço backend usando PM2${NC}\n"
+  printf "${GRAY_LIGHT}    • PM2 manterá o serviço rodando automaticamente${NC}\n"
+  printf "${GRAY_LIGHT}    • Se o serviço cair, PM2 reiniciará automaticamente${NC}\n"
+  printf "${GRAY_LIGHT}    • O backend ficará disponível na porta ${backend_port}${NC}\n\n"
 
   sleep 2
 
@@ -355,12 +387,17 @@ EOF
 #######################################
 backend_nginx_setup() {
   print_banner
-  printf "${WHITE} 💻 Configurando nginx (backend)...${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Configurando Nginx para o backend...${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando Nginx para redirecionar requisições do domínio backend${NC}\n"
+  printf "${GRAY_LIGHT}    • O domínio ${backend_url} será redirecionado para a porta ${backend_port}${NC}\n"
+  printf "${GRAY_LIGHT}    • Configurando proxy reverso para comunicação segura${NC}\n\n"
 
   sleep 2
 
-  backend_hostname=$(echo "${backend_url/https:\/\/}")
+  # Remove https:// ou http:// se presente
+  backend_hostname=$(echo "${backend_url}" | sed 's|^https\?://||')
 
 sudo su - root << EOF
 cat > /etc/nginx/sites-available/${instancia_add}-backend << 'END'

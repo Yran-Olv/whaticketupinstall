@@ -3,8 +3,13 @@
 get_mysql_root_password() {
   
   print_banner
-  printf "${WHITE} 💻 Insira senha para o usuario Deploy e Banco de Dados (Não utilizar caracteres especiais):${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Insira senha para o usuario Deploy e Banco de Dados:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Esta senha será usada para o usuário 'deploy' do sistema${NC}\n"
+  printf "${GRAY_LIGHT}    • Também será usada para acessar o banco de dados PostgreSQL${NC}\n"
+  printf "${GRAY_LIGHT}    • ⚠️  IMPORTANTE: Não utilize caracteres especiais (use apenas letras e números)${NC}\n"
+  printf "${GRAY_LIGHT}    • Guarde esta senha em local seguro!${NC}\n\n"
   read -p "> " mysql_root_password
 }
 
@@ -13,16 +18,23 @@ get_link_git() {
   print_banner
   printf "${WHITE} 💻 Insira o link do GitHub da sua instalação que deseja instalar:${GRAY_LIGHT}"
   printf "\n\n"
-  printf "${GRAY_LIGHT}   Exemplo: https://github.com/usuario/whaticket.git${GRAY_LIGHT}"
-  printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • O sistema vai baixar o código do repositório GitHub${NC}\n"
+  printf "${GRAY_LIGHT}    • Você pode usar qualquer repositório que tenha as pastas 'frontend' e 'backend'${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: https://github.com/usuario/whaticket.git${NC}\n\n"
   read -p "> " link_git
 }
 
 get_instancia_add() {
   
   print_banner
-  printf "${WHITE} 💻 Informe um nome para a Instancia/Empresa que será instalada (Não utilizar espaços ou caracteres especiais, Utilizar Letras minusculas; ):${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Informe um nome para a Instancia/Empresa que será instalada:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Este nome será usado para identificar sua instalação${NC}\n"
+  printf "${GRAY_LIGHT}    • Será usado para criar pastas, bancos de dados e serviços${NC}\n"
+  printf "${GRAY_LIGHT}    • ⚠️  IMPORTANTE: Use apenas letras minúsculas, números e hífens${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: empresa1, minhaempresa, cliente-abc${NC}\n\n"
   read -p "> " instancia_add
 }
 
@@ -31,6 +43,10 @@ get_max_whats() {
   print_banner
   printf "${WHITE} 💻 Informe a Qtde de Conexões/Whats que a ${instancia_add} poderá cadastrar:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Define quantos números de WhatsApp podem ser conectados${NC}\n"
+  printf "${GRAY_LIGHT}    • Cada conexão permite receber e enviar mensagens${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: Se digitar 5, poderá conectar até 5 números${NC}\n\n"
   read -p "> " max_whats
 }
 
@@ -39,6 +55,10 @@ get_max_user() {
   print_banner
   printf "${WHITE} 💻 Informe a Qtde de Usuarios/Atendentes que a ${instancia_add} poderá cadastrar:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Define quantos usuários/atendentes podem ser cadastrados${NC}\n"
+  printf "${GRAY_LIGHT}    • Cada usuário pode acessar o sistema e atender clientes${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: Se digitar 10, poderá cadastrar até 10 atendentes${NC}\n\n"
   read -p "> " max_user
 }
 
@@ -47,7 +67,14 @@ get_frontend_url() {
   print_banner
   printf "${WHITE} 💻 Digite o domínio do FRONTEND/PAINEL para a ${instancia_add}:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que é o Frontend:${NC}\n"
+  printf "${GRAY_LIGHT}    • É a interface web onde os usuários acessam o sistema${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: app.empresa.com.br ou painel.empresa.com.br${NC}\n"
+  printf "${GRAY_LIGHT}    • Você pode digitar com ou sem https:// (ex: app.exemplo.com.br)${NC}\n\n"
   read -p "> " frontend_url
+  
+  # Remove https:// ou http:// se o usuário digitou
+  frontend_url=$(echo "$frontend_url" | sed 's|^https\?://||')
 }
 
 get_backend_url() {
@@ -55,14 +82,26 @@ get_backend_url() {
   print_banner
   printf "${WHITE} 💻 Digite o domínio do BACKEND/API para a ${instancia_add}:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que é o Backend:${NC}\n"
+  printf "${GRAY_LIGHT}    • É a API que processa as requisições do sistema${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: api.empresa.com.br ou backend.empresa.com.br${NC}\n"
+  printf "${GRAY_LIGHT}    • Você pode digitar com ou sem https:// (ex: api.exemplo.com.br)${NC}\n\n"
   read -p "> " backend_url
+  
+  # Remove https:// ou http:// se o usuário digitou
+  backend_url=$(echo "$backend_url" | sed 's|^https\?://||')
 }
 
 get_frontend_port() {
   
   print_banner
-  printf "${WHITE} 💻 Digite a porta do FRONTEND para a ${instancia_add}; Ex: 3000 A 3999 ${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Digite a porta do FRONTEND para a ${instancia_add}:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • A porta é um número que identifica o serviço no servidor${NC}\n"
+  printf "${GRAY_LIGHT}    • Use uma porta entre 3000 e 3999${NC}\n"
+  printf "${GRAY_LIGHT}    • Cada instância deve usar uma porta diferente${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: 3000, 3001, 3100, etc.${NC}\n\n"
   read -p "> " frontend_port
 }
 
@@ -70,16 +109,26 @@ get_frontend_port() {
 get_backend_port() {
   
   print_banner
-  printf "${WHITE} 💻 Digite a porta do BACKEND para esta instancia; Ex: 4000 A 4999 ${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Digite a porta do BACKEND para esta instancia:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • A porta é um número que identifica o serviço no servidor${NC}\n"
+  printf "${GRAY_LIGHT}    • Use uma porta entre 4000 e 4999${NC}\n"
+  printf "${GRAY_LIGHT}    • Cada instância deve usar uma porta diferente${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: 4000, 4001, 4100, etc.${NC}\n\n"
   read -p "> " backend_port
 }
 
 get_redis_port() {
   
   print_banner
-  printf "${WHITE} 💻 Digite a porta do REDIS/AGENDAMENTO MSG para a ${instancia_add}; Ex: 5000 A 5999 ${GRAY_LIGHT}"
+  printf "${WHITE} 💻 Digite a porta do REDIS/AGENDAMENTO MSG para a ${instancia_add}:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 O que está sendo feito:${NC}\n"
+  printf "${GRAY_LIGHT}    • Redis é usado para armazenar mensagens temporárias e agendamentos${NC}\n"
+  printf "${GRAY_LIGHT}    • Use uma porta entre 5000 e 5999${NC}\n"
+  printf "${GRAY_LIGHT}    • Cada instância deve usar uma porta diferente${NC}\n"
+  printf "${GRAY_LIGHT}    • Exemplo: 5000, 5001, 5100, etc.${NC}\n\n"
   read -p "> " redis_port
 }
 
@@ -248,7 +297,11 @@ get_alter_frontend_url() {
   print_banner
   printf "${WHITE} 💻 Digite o NOVO domínio do FRONTEND/PAINEL para a ${empresa_dominio}:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 Você pode digitar com ou sem https:// (ex: app.exemplo.com.br)${NC}\n\n"
   read -p "> " alter_frontend_url
+  
+  # Remove https:// ou http:// se o usuário digitou
+  alter_frontend_url=$(echo "$alter_frontend_url" | sed 's|^https\?://||')
 }
 
 get_alter_backend_url() {
@@ -256,7 +309,11 @@ get_alter_backend_url() {
   print_banner
   printf "${WHITE} 💻 Digite o NOVO domínio do BACKEND/API para a ${empresa_dominio}:${GRAY_LIGHT}"
   printf "\n\n"
+  printf "${GRAY_LIGHT} 📚 Você pode digitar com ou sem https:// (ex: api.exemplo.com.br)${NC}\n\n"
   read -p "> " alter_backend_url
+  
+  # Remove https:// ou http:// se o usuário digitou
+  alter_backend_url=$(echo "$alter_backend_url" | sed 's|^https\?://||')
 }
 
 get_alter_frontend_port() {
