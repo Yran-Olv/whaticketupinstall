@@ -76,6 +76,158 @@ frontend_update() {
 EOF
 
   sleep 2
+  
+  # Atualizar configuração do Nginx
+  frontend_nginx_update
+}
+
+#######################################
+# updates nginx configuration for frontend during update
+# Arguments:
+#   None
+#######################################
+frontend_nginx_update() {
+  print_banner
+  printf "${WHITE} 💻 Atualizando configuração do Nginx (frontend)...${GRAY_LIGHT}"
+  printf "\n\n"
+
+  # Extrair informações das configurações existentes
+  # Tentar obter do arquivo .env do frontend
+  if [ -f "/home/deploy/${empresa_atualizar}/frontend/.env" ]; then
+    backend_url=$(grep "^REACT_APP_BACKEND_URL=" /home/deploy/${empresa_atualizar}/frontend/.env | cut -d'=' -f2 | tr -d '"' | tr -d "'" || echo "")
+  fi
+
+  # Tentar obter a porta do server.js
+  if [ -f "/home/deploy/${empresa_atualizar}/frontend/server.js" ]; then
+    frontend_port=$(grep "app.listen" /home/deploy/${empresa_atualizar}/frontend/server.js | grep -o '[0-9]*' | head -1 || echo "")
+  fi
+
+  # Se não encontrou, tentar obter do PM2
+  if [ -z "$frontend_port" ]; then
+    frontend_port=$(pm2 jlist | grep -A 20 "\"name\":\"${empresa_atualizar}-frontend\"" | grep -o '"pm2_env":{"PORT":[0-9]*' | grep -o '[0-9]*' | head -1 || echo "")
+  fi
+
+  # Se ainda não encontrou, tentar obter do arquivo de configuração do Nginx existente
+  if [ -z "$backend_url" ] && [ -f "/etc/nginx/sites-available/${empresa_atualizar}-frontend" ]; then
+    frontend_hostname=$(grep "server_name" /etc/nginx/sites-available/${empresa_atualizar}-frontend | awk '{print $2}' | tr -d ';' | head -1 || echo "")
+    if [ -n "$frontend_hostname" ]; then
+      backend_url="https://${frontend_hostname}"
+    fi
+  fi
+
+  # Se ainda não encontrou a porta, tentar do Nginx
+  if [ -z "$frontend_port" ] && [ -f "/etc/nginx/sites-available/${empresa_atualizar}-frontend" ]; then
+    frontend_port=$(grep "proxy_pass" /etc/nginx/sites-available/${empresa_atualizar}-frontend | grep -o ':[0-9]*' | tr -d ':' | head -1 || echo "")
+  fi
+
+  # Se não encontrou nada, usar valores padrão ou pular atualização
+  if [ -z "$backend_url" ] || [ -z "$frontend_port" ]; then
+    printf "${YELLOW} ⚠️  Não foi possível determinar URL/porta do frontend. Pulando atualização do Nginx.${NC}\n"
+    printf "${GRAY_LIGHT}    Configure manualmente se necessário.${NC}\n\n"
+    return 0
+  fi
+
+  # Remove https:// ou http:// se presente
+  frontend_hostname=$(echo "${backend_url}" | sed 's|^https\?://||')
+
+  printf "${GRAY_LIGHT} 📚 Configurações detectadas:${NC}\n"
+  printf "${GRAY_LIGHT}    • Domínio: ${frontend_hostname}${NC}\n"
+  printf "${GRAY_LIGHT}    • Porta: ${frontend_port}${NC}\n\n"
+
+  sleep 2
+
+sudo su - root << EOF
+
+cat > /etc/nginx/sites-available/${empresa_atualizar}-frontend << 'END'
+server {
+  listen 80;
+  listen [::]:80;
+  server_name $frontend_hostname;
+
+  # Redirecionar HTTP para HTTPS (descomente após configurar SSL)
+  # return 301 https://\$server_name\$request_uri;
+
+  # Logs
+  access_log /var/log/nginx/${empresa_atualizar}-frontend-access.log;
+  error_log /var/log/nginx/${empresa_atualizar}-frontend-error.log;
+
+  # Tamanho máximo de upload
+  client_max_body_size 100M;
+
+  location / {
+    proxy_pass http://127.0.0.1:${frontend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 75s;
+  }
+
+  # Configuração para WebSocket (se necessário)
+  location /socket.io {
+    proxy_pass http://127.0.0.1:${frontend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+  }
+}
+
+# Configuração HTTPS (descomente e configure após obter certificado SSL)
+# server {
+#   listen 443 ssl http2;
+#   listen [::]:443 ssl http2;
+#   server_name $frontend_hostname;
+#
+#   ssl_certificate /etc/letsencrypt/live/$frontend_hostname/fullchain.pem;
+#   ssl_certificate_key /etc/letsencrypt/live/$frontend_hostname/privkey.pem;
+#   ssl_protocols TLSv1.2 TLSv1.3;
+#   ssl_ciphers HIGH:!aNULL:!MD5;
+#
+#   access_log /var/log/nginx/${empresa_atualizar}-frontend-ssl-access.log;
+#   error_log /var/log/nginx/${empresa_atualizar}-frontend-ssl-error.log;
+#
+#   client_max_body_size 100M;
+#
+#   location / {
+#     proxy_pass http://127.0.0.1:${frontend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection 'upgrade';
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-Proto \$scheme;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#     proxy_cache_bypass \$http_upgrade;
+#     proxy_read_timeout 300s;
+#     proxy_connect_timeout 75s;
+#   }
+#
+#   location /socket.io {
+#     proxy_pass http://127.0.0.1:${frontend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection "upgrade";
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#   }
+# }
+END
+
+ln -sf /etc/nginx/sites-available/${empresa_atualizar}-frontend /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx || systemctl reload nginx
+EOF
+
+  sleep 2
+  printf "${GREEN} ✅ Configuração do Nginx (frontend) atualizada com sucesso!${NC}\n\n"
 }
 
 
@@ -189,7 +341,19 @@ sudo su - root << EOF
 
 cat > /etc/nginx/sites-available/${instancia_add}-frontend << 'END'
 server {
+  listen 80;
+  listen [::]:80;
   server_name $frontend_hostname;
+
+  # Redirecionar HTTP para HTTPS (descomente após configurar SSL)
+  # return 301 https://\$server_name\$request_uri;
+
+  # Logs
+  access_log /var/log/nginx/${instancia_add}-frontend-access.log;
+  error_log /var/log/nginx/${instancia_add}-frontend-error.log;
+
+  # Tamanho máximo de upload
+  client_max_body_size 100M;
 
   location / {
     proxy_pass http://127.0.0.1:${frontend_port};
@@ -201,11 +365,66 @@ server {
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_cache_bypass \$http_upgrade;
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 75s;
+  }
+
+  # Configuração para WebSocket (se necessário)
+  location /socket.io {
+    proxy_pass http://127.0.0.1:${frontend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
   }
 }
+
+# Configuração HTTPS (descomente e configure após obter certificado SSL)
+# server {
+#   listen 443 ssl http2;
+#   listen [::]:443 ssl http2;
+#   server_name $frontend_hostname;
+#
+#   ssl_certificate /etc/letsencrypt/live/$frontend_hostname/fullchain.pem;
+#   ssl_certificate_key /etc/letsencrypt/live/$frontend_hostname/privkey.pem;
+#   ssl_protocols TLSv1.2 TLSv1.3;
+#   ssl_ciphers HIGH:!aNULL:!MD5;
+#
+#   access_log /var/log/nginx/${instancia_add}-frontend-ssl-access.log;
+#   error_log /var/log/nginx/${instancia_add}-frontend-ssl-error.log;
+#
+#   client_max_body_size 100M;
+#
+#   location / {
+#     proxy_pass http://127.0.0.1:${frontend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection 'upgrade';
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-Proto \$scheme;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#     proxy_cache_bypass \$http_upgrade;
+#     proxy_read_timeout 300s;
+#     proxy_connect_timeout 75s;
+#   }
+#
+#   location /socket.io {
+#     proxy_pass http://127.0.0.1:${frontend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection "upgrade";
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#   }
+# }
 END
 
-ln -s /etc/nginx/sites-available/${instancia_add}-frontend /etc/nginx/sites-enabled
+ln -sf /etc/nginx/sites-available/${instancia_add}-frontend /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx || systemctl reload nginx
 EOF
 
   sleep 2

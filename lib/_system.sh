@@ -256,7 +256,22 @@ sleep 2
  sudo su - root <<EOF
   cat > /etc/nginx/sites-available/${empresa_dominio}-backend << 'END'
 server {
+  listen 80;
+  listen [::]:80;
   server_name $backend_hostname;
+
+  access_log /var/log/nginx/${empresa_dominio}-backend-access.log;
+  error_log /var/log/nginx/${empresa_dominio}-backend-error.log;
+
+  client_max_body_size 100M;
+
+  location /public {
+    alias /home/deploy/${empresa_dominio}/backend/public;
+    expires 30d;
+    add_header Cache-Control "public, immutable";
+    access_log off;
+  }
+
   location / {
     proxy_pass http://127.0.0.1:${alter_backend_port};
     proxy_http_version 1.1;
@@ -267,10 +282,23 @@ server {
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_cache_bypass \$http_upgrade;
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 75s;
+  }
+
+  location /socket.io {
+    proxy_pass http://127.0.0.1:${alter_backend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_read_timeout 86400;
   }
 }
 END
-ln -s /etc/nginx/sites-available/${empresa_dominio}-backend /etc/nginx/sites-enabled
+ln -sf /etc/nginx/sites-available/${empresa_dominio}-backend /etc/nginx/sites-enabled/
 EOF
 
 sleep 2
@@ -280,7 +308,15 @@ frontend_hostname=$(echo "${alter_frontend_url/https:\/\/}")
 sudo su - root << EOF
 cat > /etc/nginx/sites-available/${empresa_dominio}-frontend << 'END'
 server {
+  listen 80;
+  listen [::]:80;
   server_name $frontend_hostname;
+
+  access_log /var/log/nginx/${empresa_dominio}-frontend-access.log;
+  error_log /var/log/nginx/${empresa_dominio}-frontend-error.log;
+
+  client_max_body_size 100M;
+
   location / {
     proxy_pass http://127.0.0.1:${alter_frontend_port};
     proxy_http_version 1.1;
@@ -291,10 +327,22 @@ server {
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_cache_bypass \$http_upgrade;
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 75s;
+  }
+
+  location /socket.io {
+    proxy_pass http://127.0.0.1:${alter_frontend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
   }
 }
 END
-ln -s /etc/nginx/sites-available/${empresa_dominio}-frontend /etc/nginx/sites-enabled
+ln -sf /etc/nginx/sites-available/${empresa_dominio}-frontend /etc/nginx/sites-enabled/
 EOF
 
  sleep 2

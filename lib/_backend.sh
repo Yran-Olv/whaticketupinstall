@@ -303,6 +303,170 @@ backend_update() {
 EOF
 
   sleep 2
+  
+  # Atualizar configuração do Nginx
+  backend_nginx_update
+}
+
+#######################################
+# updates nginx configuration for backend during update
+# Arguments:
+#   None
+#######################################
+backend_nginx_update() {
+  print_banner
+  printf "${WHITE} 💻 Atualizando configuração do Nginx (backend)...${GRAY_LIGHT}"
+  printf "\n\n"
+
+  # Extrair informações das configurações existentes
+  # Tentar obter do arquivo .env do backend
+  if [ -f "/home/deploy/${empresa_atualizar}/backend/.env" ]; then
+    backend_url=$(grep "^BACKEND_URL=" /home/deploy/${empresa_atualizar}/backend/.env | cut -d'=' -f2 | tr -d '"' | tr -d "'" || echo "")
+    backend_port=$(grep "^PORT=" /home/deploy/${empresa_atualizar}/backend/.env | cut -d'=' -f2 | tr -d '"' | tr -d "'" || echo "")
+  fi
+
+  # Se não encontrou no .env, tentar obter do PM2
+  if [ -z "$backend_port" ]; then
+    backend_port=$(pm2 jlist | grep -A 20 "\"name\":\"${empresa_atualizar}-backend\"" | grep -o '"pm2_env":{"PORT":[0-9]*' | grep -o '[0-9]*' | head -1 || echo "")
+  fi
+
+  # Se ainda não encontrou, tentar obter do arquivo de configuração do Nginx existente
+  if [ -z "$backend_url" ] && [ -f "/etc/nginx/sites-available/${empresa_atualizar}-backend" ]; then
+    backend_hostname=$(grep "server_name" /etc/nginx/sites-available/${empresa_atualizar}-backend | awk '{print $2}' | tr -d ';' | head -1 || echo "")
+    if [ -n "$backend_hostname" ]; then
+      backend_url="https://${backend_hostname}"
+    fi
+  fi
+
+  # Se ainda não encontrou a porta, tentar do Nginx
+  if [ -z "$backend_port" ] && [ -f "/etc/nginx/sites-available/${empresa_atualizar}-backend" ]; then
+    backend_port=$(grep "proxy_pass" /etc/nginx/sites-available/${empresa_atualizar}-backend | grep -o ':[0-9]*' | tr -d ':' | head -1 || echo "")
+  fi
+
+  # Se não encontrou nada, usar valores padrão ou pular atualização
+  if [ -z "$backend_url" ] || [ -z "$backend_port" ]; then
+    printf "${YELLOW} ⚠️  Não foi possível determinar URL/porta do backend. Pulando atualização do Nginx.${NC}\n"
+    printf "${GRAY_LIGHT}    Configure manualmente se necessário.${NC}\n\n"
+    return 0
+  fi
+
+  # Remove https:// ou http:// se presente
+  backend_hostname=$(echo "${backend_url}" | sed 's|^https\?://||')
+
+  printf "${GRAY_LIGHT} 📚 Configurações detectadas:${NC}\n"
+  printf "${GRAY_LIGHT}    • Domínio: ${backend_hostname}${NC}\n"
+  printf "${GRAY_LIGHT}    • Porta: ${backend_port}${NC}\n\n"
+
+  sleep 2
+
+sudo su - root << EOF
+cat > /etc/nginx/sites-available/${empresa_atualizar}-backend << 'END'
+server {
+  listen 80;
+  listen [::]:80;
+  server_name $backend_hostname;
+
+  # Redirecionar HTTP para HTTPS (descomente após configurar SSL)
+  # return 301 https://\$server_name\$request_uri;
+
+  # Logs
+  access_log /var/log/nginx/${empresa_atualizar}-backend-access.log;
+  error_log /var/log/nginx/${empresa_atualizar}-backend-error.log;
+
+  # Tamanho máximo de upload
+  client_max_body_size 100M;
+
+  # Servir arquivos estáticos diretamente do backend
+  location /public {
+    alias /home/deploy/${empresa_atualizar}/backend/public;
+    expires 30d;
+    add_header Cache-Control "public, immutable";
+    access_log off;
+  }
+
+  # API e outras rotas
+  location / {
+    proxy_pass http://127.0.0.1:${backend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_cache_bypass \$http_upgrade;
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 75s;
+  }
+
+  # WebSocket para Socket.IO
+  location /socket.io {
+    proxy_pass http://127.0.0.1:${backend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_read_timeout 86400;
+  }
+}
+
+# Configuração HTTPS (descomente e configure após obter certificado SSL)
+# server {
+#   listen 443 ssl http2;
+#   listen [::]:443 ssl http2;
+#   server_name $backend_hostname;
+#
+#   ssl_certificate /etc/letsencrypt/live/$backend_hostname/fullchain.pem;
+#   ssl_certificate_key /etc/letsencrypt/live/$backend_hostname/privkey.pem;
+#   ssl_protocols TLSv1.2 TLSv1.3;
+#   ssl_ciphers HIGH:!aNULL:!MD5;
+#
+#   access_log /var/log/nginx/${empresa_atualizar}-backend-ssl-access.log;
+#   error_log /var/log/nginx/${empresa_atualizar}-backend-ssl-error.log;
+#
+#   client_max_body_size 100M;
+#
+#   location /public {
+#     alias /home/deploy/${empresa_atualizar}/backend/public;
+#     expires 30d;
+#     add_header Cache-Control "public, immutable";
+#     access_log off;
+#   }
+#
+#   location / {
+#     proxy_pass http://127.0.0.1:${backend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection 'upgrade';
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-Proto \$scheme;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#     proxy_cache_bypass \$http_upgrade;
+#     proxy_read_timeout 300s;
+#     proxy_connect_timeout 75s;
+#   }
+#
+#   location /socket.io {
+#     proxy_pass http://127.0.0.1:${backend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection "upgrade";
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#     proxy_read_timeout 86400;
+#   }
+# }
+END
+ln -sf /etc/nginx/sites-available/${empresa_atualizar}-backend /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx || systemctl reload nginx
+EOF
+
+  sleep 2
+  printf "${GREEN} ✅ Configuração do Nginx (backend) atualizada com sucesso!${NC}\n\n"
 }
 
 #######################################
@@ -402,7 +566,29 @@ backend_nginx_setup() {
 sudo su - root << EOF
 cat > /etc/nginx/sites-available/${instancia_add}-backend << 'END'
 server {
+  listen 80;
+  listen [::]:80;
   server_name $backend_hostname;
+
+  # Redirecionar HTTP para HTTPS (descomente após configurar SSL)
+  # return 301 https://\$server_name\$request_uri;
+
+  # Logs
+  access_log /var/log/nginx/${instancia_add}-backend-access.log;
+  error_log /var/log/nginx/${instancia_add}-backend-error.log;
+
+  # Tamanho máximo de upload
+  client_max_body_size 100M;
+
+  # Servir arquivos estáticos diretamente do backend
+  location /public {
+    alias /home/deploy/${instancia_add}/backend/public;
+    expires 30d;
+    add_header Cache-Control "public, immutable";
+    access_log off;
+  }
+
+  # API e outras rotas
   location / {
     proxy_pass http://127.0.0.1:${backend_port};
     proxy_http_version 1.1;
@@ -413,10 +599,74 @@ server {
     proxy_set_header X-Forwarded-Proto \$scheme;
     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
     proxy_cache_bypass \$http_upgrade;
+    proxy_read_timeout 300s;
+    proxy_connect_timeout 75s;
+  }
+
+  # WebSocket para Socket.IO
+  location /socket.io {
+    proxy_pass http://127.0.0.1:${backend_port};
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Real-IP \$remote_addr;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_read_timeout 86400;
   }
 }
+
+# Configuração HTTPS (descomente e configure após obter certificado SSL)
+# server {
+#   listen 443 ssl http2;
+#   listen [::]:443 ssl http2;
+#   server_name $backend_hostname;
+#
+#   ssl_certificate /etc/letsencrypt/live/$backend_hostname/fullchain.pem;
+#   ssl_certificate_key /etc/letsencrypt/live/$backend_hostname/privkey.pem;
+#   ssl_protocols TLSv1.2 TLSv1.3;
+#   ssl_ciphers HIGH:!aNULL:!MD5;
+#
+#   access_log /var/log/nginx/${instancia_add}-backend-ssl-access.log;
+#   error_log /var/log/nginx/${instancia_add}-backend-ssl-error.log;
+#
+#   client_max_body_size 100M;
+#
+#   location /public {
+#     alias /home/deploy/${instancia_add}/backend/public;
+#     expires 30d;
+#     add_header Cache-Control "public, immutable";
+#     access_log off;
+#   }
+#
+#   location / {
+#     proxy_pass http://127.0.0.1:${backend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection 'upgrade';
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-Proto \$scheme;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#     proxy_cache_bypass \$http_upgrade;
+#     proxy_read_timeout 300s;
+#     proxy_connect_timeout 75s;
+#   }
+#
+#   location /socket.io {
+#     proxy_pass http://127.0.0.1:${backend_port};
+#     proxy_http_version 1.1;
+#     proxy_set_header Upgrade \$http_upgrade;
+#     proxy_set_header Connection "upgrade";
+#     proxy_set_header Host \$host;
+#     proxy_set_header X-Real-IP \$remote_addr;
+#     proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+#     proxy_read_timeout 86400;
+#   }
+# }
 END
-ln -s /etc/nginx/sites-available/${instancia_add}-backend /etc/nginx/sites-enabled
+ln -sf /etc/nginx/sites-available/${instancia_add}-backend /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx || systemctl reload nginx
 EOF
 
   sleep 2
