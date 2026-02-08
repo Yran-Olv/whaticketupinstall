@@ -30,19 +30,36 @@ backend_redis_create() {
   
   sleep 2
   
+  # Ensure PostgreSQL is running
+  if ! sudo systemctl is-active --quiet postgresql 2>/dev/null; then
+    printf "${YELLOW} ⚠️  PostgreSQL não está rodando. Iniciando...${NC}\n"
+    sudo systemctl start postgresql 2>/dev/null || sudo service postgresql start 2>/dev/null
+    sudo systemctl enable postgresql 2>/dev/null
+    sleep 3
+  fi
+  
   # Create PostgreSQL database and user
   sudo -u postgres bash <<PSQL_SCRIPT
-# Create database if not exists
-if ! psql -lqt | cut -d \| -f 1 | grep -qw ${instancia_add}; then
-  createdb ${instancia_add}
-fi
+# Drop user if exists
+psql -c "DROP USER IF EXISTS ${instancia_add};" 2>/dev/null || true
 
-# Drop user if exists and create new
-psql -c "DROP USER IF EXISTS ${instancia_add};" || true
-psql -c "CREATE USER ${instancia_add} WITH SUPERUSER INHERIT CREATEDB CREATEROLE PASSWORD '${mysql_root_password}';"
+# Drop database if exists
+psql -c "DROP DATABASE IF EXISTS ${instancia_add};" 2>/dev/null || true
 
-# Grant privileges
+# Create user (without SUPERUSER for security, but with necessary privileges)
+psql -c "CREATE USER ${instancia_add} WITH CREATEDB CREATEROLE PASSWORD '${mysql_root_password}';"
+
+# Create database with owner
+createdb -O ${instancia_add} ${instancia_add}
+
+# Connect to the database and create uuid-ossp extension
+psql -d ${instancia_add} -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"
+
+# Grant all privileges
 psql -c "GRANT ALL PRIVILEGES ON DATABASE ${instancia_add} TO ${instancia_add};"
+
+# Grant privileges on schema public
+psql -d ${instancia_add} -c "GRANT ALL ON SCHEMA public TO ${instancia_add};"
 PSQL_SCRIPT
 EOF
 

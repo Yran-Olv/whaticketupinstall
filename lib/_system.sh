@@ -528,16 +528,53 @@ EOF
   # Verifica PostgreSQL
   if system_check_postgresql; then
     printf "${GRAY_LIGHT} ℹ️  PostgreSQL já está instalado e rodando, pulando instalação...${NC}\n\n"
+    # Garante que está rodando mesmo assim
+    sudo systemctl start postgresql 2>/dev/null || sudo service postgresql start 2>/dev/null
+    sudo systemctl enable postgresql 2>/dev/null
   else
     printf "${WHITE} 🔄 Instalando PostgreSQL...${NC}\n"
     sudo su - root <<EOF
+    # Add PostgreSQL repository
     sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
-    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add -
-    sudo apt-get update -y && sudo apt-get -y install postgresql postgresql-contrib
+    
+    # Add PostgreSQL key (try new method first, fallback to old)
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add - 2>/dev/null || \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo apt-key add - 2>/dev/null || \
+    (wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/postgresql.gpg > /dev/null 2>&1)
+    
+    # Update and install
+    sudo apt-get update -y
+    sudo apt-get install -y postgresql postgresql-contrib
+    
+    # Start and enable PostgreSQL
     sudo systemctl start postgresql
     sudo systemctl enable postgresql
+    
+    # Wait for PostgreSQL to be ready
+    sleep 3
+    
+    # Verify it's running
+    if sudo systemctl is-active --quiet postgresql; then
+      echo "PostgreSQL iniciado com sucesso"
+    else
+      echo "Aviso: PostgreSQL pode não estar rodando"
+    fi
 EOF
-    printf "${GREEN} ✅ PostgreSQL instalado e iniciado com sucesso!${NC}\n\n"
+    
+    # Verify installation
+    if sudo systemctl is-active --quiet postgresql 2>/dev/null || sudo service postgresql status >/dev/null 2>&1; then
+      printf "${GREEN} ✅ PostgreSQL instalado e iniciado com sucesso!${NC}\n\n"
+    else
+      printf "${YELLOW} ⚠️  PostgreSQL instalado mas pode não estar rodando. Tentando iniciar...${NC}\n"
+      sudo systemctl start postgresql 2>/dev/null || sudo service postgresql start 2>/dev/null
+      sudo systemctl enable postgresql 2>/dev/null
+      sleep 2
+      if sudo systemctl is-active --quiet postgresql 2>/dev/null; then
+        printf "${GREEN} ✅ PostgreSQL iniciado com sucesso!${NC}\n\n"
+      else
+        printf "${RED} ❌ Erro ao iniciar PostgreSQL. Verifique manualmente: sudo systemctl status postgresql${NC}\n\n"
+      fi
+    fi
   fi
 
   sleep 2
